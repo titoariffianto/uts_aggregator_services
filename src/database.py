@@ -1,30 +1,46 @@
 import aiosqlite
 import json
-from .models import Event
 import logging
+from .models import Event
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
 
 class EventDatabase:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._connection = None
+        self._connected = False
         log.info(f"Database initialized at: {db_path}")
 
+    @property
+    def connected(self) -> bool:
+        """Property untuk cek status koneksi."""
+        return self._connected and self._connection is not None
+
     async def connect(self):
-        self._connection = await aiosqlite.connect(self.db_path)
-        log.info(f"Connected to database: {self.db_path}")
+        """Membuka koneksi ke database."""
+        if not self._connection:
+            self._connection = await aiosqlite.connect(self.db_path)
+            await self._connection.execute("PRAGMA foreign_keys = ON;")
+            await self._connection.commit()
+            self._connected = True
+            log.info(f"Connected to database: {self.db_path}")
 
     async def close(self):
+        """Menutup koneksi database."""
         if self._connection:
             await self._connection.close()
+            self._connection = None
+            self._connected = False
             log.info(f"Database connection closed: {self.db_path}")
 
     async def init_db(self):
-        if not self._connection:
+        """Inisialisasi tabel database."""
+        if not self.connected:
             await self.connect()
-            
+
         async with self._connection.cursor() as cursor:
             await cursor.execute("""
                 CREATE TABLE IF NOT EXISTS seen_events (
@@ -44,10 +60,17 @@ class EventDatabase:
                     payload_json TEXT NOT NULL
                 )
             """)
-        log.info("Database tables initialized.")
+
+            # 🧹 Tambahkan ini agar data lama dibersihkan saat inisialisasi
+            await cursor.execute("DELETE FROM seen_events")
+            await cursor.execute("DELETE FROM processed_events")
+
+        await self._connection.commit()
+        log.info("Database tables initialized and cleaned for test run.")
 
     async def check_and_mark_duplicate(self, event: Event) -> bool:
-        if not self._connection:
+        """Cek apakah event sudah pernah diterima sebelumnya."""
+        if not self.connected:
             raise Exception("Database not connected")
 
         try:
@@ -55,7 +78,8 @@ class EventDatabase:
                 "INSERT INTO seen_events (topic, event_id) VALUES (?, ?)",
                 (event.topic, event.event_id)
             )
-            return False
+            await self._connection.commit()
+            return False  # bukan duplikat
         except aiosqlite.IntegrityError:
             log.warning(f"Duplicate detected: {event.topic}/{event.event_id}")
             return True
@@ -64,9 +88,10 @@ class EventDatabase:
             return True
 
     async def store_processed_event(self, event: Event):
-        if not self._connection:
+        """Simpan event yang sudah diproses."""
+        if not self.connected:
             raise Exception("Database not connected")
-            
+
         payload_str = json.dumps(event.payload)
         await self._connection.execute(
             """
@@ -75,11 +100,13 @@ class EventDatabase:
             """,
             (event.topic, event.event_id, event.timestamp.isoformat(), event.source, payload_str)
         )
+        await self._connection.commit()
 
     async def get_events_by_topic(self, topic: str) -> list[dict]:
-        if not self._connection:
+        """Ambil semua event berdasarkan topik."""
+        if not self.connected:
             raise Exception("Database not connected")
-            
+
         async with self._connection.execute(
             "SELECT topic, event_id, timestamp, source, payload_json FROM processed_events WHERE topic = ?",
             (topic,)
@@ -96,17 +123,19 @@ class EventDatabase:
             ]
 
     async def get_distinct_topics(self) -> list[str]:
-        if not self._connection:
+        """Ambil daftar semua topik unik."""
+        if not self.connected:
             raise Exception("Database not connected")
-            
+
         async with self._connection.execute("SELECT DISTINCT topic FROM processed_events") as cursor:
             rows = await cursor.fetchall()
             return [row[0] for row in rows]
 
     async def get_total_processed_count(self) -> int:
-        if not self._connection:
+        """Hitung total event yang telah diproses."""
+        if not self.connected:
             raise Exception("Database not connected")
-            
+
         async with self._connection.execute("SELECT COUNT(id) FROM processed_events") as cursor:
             row = await cursor.fetchone()
             return row[0] if row else 0
