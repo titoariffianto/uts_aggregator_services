@@ -1,0 +1,22 @@
+services:
+  aggregator:
+    build: .
+    container_name: uts-aggregator-service
+    ports:
+      - "8080:8080"
+    volumes:
+      - aggregator-data:/app/data
+    restart: unless-stopped
+    environment:
+      - DB_PATH=/app/data/aggregator.db
+
+  publisher:
+    build: ./publisher
+    container_name: uts-publisher-script
+    depends_on:
+      - aggregator
+    restart: on-failure
+
+volumes:
+  aggregator-data:
+    driver: local
