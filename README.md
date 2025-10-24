@@ -22,8 +22,6 @@ Data disimpan di volume Docker bernama `aggregator-data` yang di-mount ke `/app/
 
 ## Cara Menjalankan (dengan Docker Compose)
 
-Ini adalah cara yang direkomendasikan dan mencakup skenario bonus.
-
 1.  **Pastikan Docker Desktop berjalan.**
 
 2.  **Build dan jalankan layanan (detached mode):**
@@ -131,10 +129,6 @@ Melihat event unik yang telah diproses berdasarkan topik.
 1.  Pastikan Anda memiliki `pytest`, `pytest-asyncio`, dan `httpx` di venv lokal Anda.
     ```powershell
     pip install pytest pytest-asyncio httpx
-    ```
-2.  Set PYTHONPATH agar import `src` berfungsi:
-    ```powershell
-    $env:PYTHONPATH = ".;" + $env:PYTHONPATH
     ```
 3.  Jalankan pytest:
     ```powershell
