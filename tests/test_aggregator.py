@@ -3,10 +3,10 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-# Tambahkan path agar bisa impor src
+# Menambahkan path src ke sys.path agar modul dapat diimpor
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.main import app  # sekarang akan terbaca
+from src.main import app  
 client = TestClient(app)
 
 def test_health_check():
